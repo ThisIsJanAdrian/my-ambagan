@@ -1,0 +1,3 @@
+# Domain rules are enforced in Postgres, on Supabase
+
+The stack is Next.js on Vercel with Supabase (Postgres and Auth). Rules that must never be bypassed are enforced in the database with row-level security and triggers, not only in app code: the audit log is insert-only, a Room has at most ten current Members, and a Member cannot leave or be kicked with unsettled Shares. We accepted lock-in to Supabase and Postgres in exchange for guarantees that hold even if the app code has a bug. The lighter alternative (SvelteKit or plain React with SQLite or Turso) was rejected because we would have to build auth and this enforcement ourselves.
