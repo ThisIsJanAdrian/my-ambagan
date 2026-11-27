@@ -3,15 +3,20 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-type Entry = { id: number; actor_username: string; event_type: string; created_at: string };
+type Entry = { id: number; actor_username: string; event_type: string; target_username: string | null; created_at: string };
 
-const EVENT_LABELS: Record<string, string> = {
-  room_created: "Room created",
-};
-
-/** "some_event" -> "Some event" for event types this screen has no wording for yet. */
-function describe(eventType: string) {
-  return EVENT_LABELS[eventType] ?? eventType.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+/** One plain sentence per event, e.g. "ana joined". Unknown event types fall back to a readable form of the type. */
+function describe({ actor_username: actor, event_type, target_username: target }: Entry) {
+  switch (event_type) {
+    case "room_created": return `${actor} created the Room`;
+    case "member_joined": return `${actor} joined`;
+    case "member_rejoined": return `${actor} rejoined`;
+    case "member_left": return `${actor} left`;
+    case "member_promoted": return `${actor} promoted ${target ?? "a Member"} to Moderator`;
+    case "member_kicked": return `${actor} kicked ${target ?? "a Member"}`;
+    case "moderator_demoted": return `${actor} stepped down as Moderator`;
+    default: return `${actor}: ${event_type.replace(/_/g, " ")}`;
+  }
 }
 
 /** A Room's Audit log, newest first. Opened from the Room's menu, never part of the main feed. */
@@ -44,10 +49,8 @@ export function AuditLog({ roomId, onBack }: { roomId: string; onBack: () => voi
       <ul style={{ listStyle: "none", padding: 0 }}>
         {entries?.map((entry) => (
           <li key={entry.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
-            <div>{describe(entry.event_type)}</div>
-            <small>
-              {entry.actor_username} · {new Date(entry.created_at).toLocaleString()}
-            </small>
+            <div>{describe(entry)}</div>
+            <small>{new Date(entry.created_at).toLocaleString()}</small>
           </li>
         ))}
       </ul>
