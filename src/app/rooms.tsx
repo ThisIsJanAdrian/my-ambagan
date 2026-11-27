@@ -103,7 +103,7 @@ export function Rooms({ username }: { username: string }) {
           <li key={room.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
             <button type="button" onClick={() => setOpenRoom(room)} style={{ background: "none", border: 0, padding: 0, font: "inherit", textAlign: "left", cursor: "pointer", width: "100%" }}>
               <code style={{ fontSize: 16, wordBreak: "break-all" }}>{room.id}</code>
-              {room.creator_id === me && <small> · you are the Creator</small>}
+              {room.creator_id === me && <small> Â· you are the Creator</small>}
             </button>
           </li>
         ))}

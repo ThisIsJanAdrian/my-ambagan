@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { AuditLog } from "./audit-log";
 import { Members } from "./members";
@@ -26,6 +26,7 @@ export function Room({ roomId, creatorId, me, onBack, onKicked }: {
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const left = useRef(false);
 
   const iAmCreator = me === creatorId;
 
@@ -39,7 +40,8 @@ export function Room({ roomId, creatorId, me, onBack, onKicked }: {
       .eq("account_id", me)
       .maybeSingle();
     if (error) return;
-    if (!data) return onKicked();
+    if (!data && !left.current) return onKicked();
+    if (!data) return;
     setIsModerator(data.is_moderator);
   }, [roomId, me, onKicked]);
 
@@ -66,6 +68,7 @@ export function Room({ roomId, creatorId, me, onBack, onKicked }: {
     const { error } = await supabase.rpc("leave_room", { p_room_id: roomId });
     setBusy(false);
     if (error) return setMessage(error.message);
+    left.current = true;
     onBack();
   }
 
