@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 
-type Step = "signup" | "code" | "username" | "done" | "login" | "reset-request" | "reset-code";
+type Step = "signup" | "code" | "username" | "done" | "login" | "reset-request" | "reset-code" | "reset-password";
 
 const field = { display: "block", width: "100%", padding: 12, fontSize: 16, margin: "8px 0", boxSizing: "border-box" } as const;
 const linkButton = { background: "none", border: 0, padding: 0, color: "#06c", textDecoration: "underline", cursor: "pointer", font: "inherit" } as const;
@@ -15,7 +15,8 @@ const SUBMIT_LABEL: Record<Step, string> = {
   done: "",
   login: "Log in",
   "reset-request": "Send reset code",
-  "reset-code": "Set new password",
+  "reset-code": "Verify code",
+  "reset-password": "Set new password",
 };
 
 export default function Home() {
@@ -26,17 +27,15 @@ export default function Home() {
   const [username, setUsername] = useState("");
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
-  const [codeAccepted, setCodeAccepted] = useState(false);
+  const [confirm, setConfirm] = useState("");
 
   function go(next: Step) {
-    if (codeAccepted) {
-      // Abandoning a half-finished reset: drop the session its code created.
-      void supabase.auth.signOut();
-      setCodeAccepted(false);
-    }
+    // Abandoning a half-finished reset: drop the session its code created.
+    if (step === "reset-password") void supabase.auth.signOut();
     setMessage("");
     setNotice("");
     setPassword("");
+    setConfirm("");
     setCode("");
     setStep(next);
   }
@@ -81,13 +80,13 @@ export default function Home() {
       setStep("reset-code");
       setNotice(`If ${email} is registered, we emailed it a 6-digit code.`);
     } else if (step === "reset-code") {
-      // A code can only be used once, so after it is accepted keep that session and let the
-      // user retry the password (e.g. "must differ from your old one") without re-entering it.
-      if (!codeAccepted) {
-        const { error: codeError } = await supabase.auth.verifyOtp({ email, token: code, type: "recovery" });
-        if (codeError) return setMessage("That code is wrong or has expired. Your old password still works.");
-        setCodeAccepted(true);
-      }
+      // Accepting the code uses it up and starts a session; the password is set on the next screen.
+      const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "recovery" });
+      if (error) return setMessage("That code is wrong or has expired. Your old password still works.");
+      setCode("");
+      setStep("reset-password");
+    } else if (step === "reset-password") {
+      if (password !== confirm) return setMessage("The two passwords do not match.");
       const { error } = await supabase.auth.updateUser({ password });
       if (error) return setMessage(error.message);
       const { data } = await supabase.auth.getUser();
@@ -132,13 +131,13 @@ export default function Home() {
         </>
       )}
       {step === "reset-code" && (
+        <input style={field} inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} required />
+      )}
+      {step === "reset-password" && (
         <>
-          {codeAccepted ? (
-            <p>Code accepted. Choose your new password.</p>
-          ) : (
-            <input style={field} inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} required />
-          )}
+          <p>Code accepted. Choose your new password.</p>
           {passwordField("New password")}
+          <input style={field} type="password" placeholder="Confirm new password" minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
         </>
       )}
       {step === "code" && (
@@ -176,7 +175,7 @@ export default function Home() {
             <button type="button" style={linkButton} onClick={() => go("reset-request")}>Forgot password?</button>
           </>
         )}
-        {(step === "reset-request" || step === "reset-code") && (
+        {(step === "reset-request" || step === "reset-code" || step === "reset-password") && (
           <button type="button" style={linkButton} onClick={() => go("login")}>Back to log in</button>
         )}
       </p>
