@@ -46,6 +46,13 @@ export class Db {
     return new Account(this, id, email);
   }
 
+  /** Create a verified Account that has already chosen its Username. */
+  async createAccountNamed(username: string): Promise<Account> {
+    const account = await this.createAccount();
+    await account.setUsername(username);
+    return account;
+  }
+
   /**
    * Run `fn` as the given authenticated Account (or anonymous when null).
    * Changes persist for the rest of the test unless `fn` throws, in which
@@ -87,5 +94,11 @@ export class Account {
 
   async setUsername(username: string) {
     return this.run("select public.set_username($1)", [username]);
+  }
+
+  /** Create a Room as this Account; returns its Room ID. */
+  async createRoom(): Promise<string> {
+    const { rows } = await this.run("select public.create_room() as room_id");
+    return rows[0].room_id;
   }
 }
