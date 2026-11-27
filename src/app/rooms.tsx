@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { AuditLog } from "./audit-log";
+import { Members } from "./members";
 
 type Room = { id: string; creator_id: string; created_at: string };
 
@@ -17,6 +18,7 @@ export function Rooms({ username }: { username: string }) {
   const [joinId, setJoinId] = useState("");
   const [joined, setJoined] = useState(false);
   const [auditRoom, setAuditRoom] = useState<string | null>(null);
+  const [membersRoom, setMembersRoom] = useState<Room | null>(null);
 
   const load = useCallback(async () => {
     const [{ data, error }, { data: auth }] = await Promise.all([
@@ -64,6 +66,7 @@ export function Rooms({ username }: { username: string }) {
     await load();
   }
 
+  if (membersRoom) return <Members roomId={membersRoom.id} creatorId={membersRoom.creator_id} me={me} onBack={() => setMembersRoom(null)} />;
   if (auditRoom) return <AuditLog roomId={auditRoom} onBack={() => setAuditRoom(null)} />;
 
   return (
@@ -93,6 +96,9 @@ export function Rooms({ username }: { username: string }) {
         {rooms?.map((room) => (
           <li key={room.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
             <code style={{ fontSize: 16, wordBreak: "break-all" }}>{room.id}</code>
+            <button type="button" onClick={() => setMembersRoom(room)} style={{ marginLeft: 8 }}>
+              Members
+            </button>
             {room.creator_id === me ? (
               <small> · you are the Creator</small>
             ) : (
