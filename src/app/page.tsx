@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
+import { Rooms } from "./rooms";
 
 type Step = "signup" | "code" | "username" | "done" | "login" | "reset-request" | "reset-code" | "reset-password";
 
@@ -100,7 +101,7 @@ export default function Home() {
     if (data === false) setMessage(`Username "${username}" is already taken.`);
   }
 
-  if (step === "done") return <h1>Welcome, {username}!</h1>;
+  if (step === "done") return <Rooms username={username} />;
 
   const emailField = (
     <input style={field} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
