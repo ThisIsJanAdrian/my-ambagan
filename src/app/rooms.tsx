@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { AuditLog } from "./audit-log";
 
 type Room = { id: string; creator_id: string; created_at: string };
 
@@ -13,6 +14,7 @@ export function Rooms({ username }: { username: string }) {
   const [me, setMe] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [auditRoom, setAuditRoom] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [{ data, error }, { data: auth }] = await Promise.all([
@@ -36,6 +38,8 @@ export function Rooms({ username }: { username: string }) {
     if (error) return setMessage(error.message);
     await load();
   }
+
+  if (auditRoom) return <AuditLog roomId={auditRoom} onBack={() => setAuditRoom(null)} />;
 
   return (
     <main>
