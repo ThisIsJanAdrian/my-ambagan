@@ -1,1 +1,1 @@
-SELECT * FROM public.profiles
+SELECT * FROM public.accounts

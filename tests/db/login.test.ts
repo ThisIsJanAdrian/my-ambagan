@@ -63,6 +63,28 @@ describe("password reset", () => {
     expect((await login(email, PASSWORD)).status).toBe(400);
   });
 
+  it("choosing the old password is refused, but the verified session can still set a different one", async () => {
+    const email = await signUpAndVerify("reset");
+    const code = await requestReset(email);
+    const { access_token } = await (await verifyReset(email, code)).json();
+
+    const same = await auth("user", { password: PASSWORD }, { token: access_token, method: "PUT" });
+    expect(same.status).toBe(422);
+    expect((await same.json()).error_code).toBe("same_password");
+
+    // The code was consumed by verification, so the retry must reuse the session, not the code.
+    expect((await verifyReset(email, code)).status).toBe(403);
+    const retry = await auth("user", { password: NEW_PASSWORD }, { token: access_token, method: "PUT" });
+    expect(retry.status).toBe(200);
+    expect((await login(email, NEW_PASSWORD)).status).toBe(200);
+  });
+
+  it("a password shorter than 8 characters is refused at sign-up", async () => {
+    const res = await auth("signup", { email: newEmail("short"), password: "short12" });
+    expect(res.status).toBe(422);
+    expect((await res.json()).error_code).toBe("weak_password");
+  });
+
   it("an invalid code is refused and the old password keeps working", async () => {
     const email = await signUpAndVerify("reset");
     const code = await requestReset(email);
