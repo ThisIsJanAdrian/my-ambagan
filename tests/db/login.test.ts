@@ -1,94 +1,112 @@
 import { describe, expect, it } from "vitest";
-import { PASSWORD, auth, newEmail, codeSentTo, verifiedAccount } from "./auth-api";
+import {
+  PASSWORD,
+  RESET_SUBJECT,
+  ageResetCode,
+  auth,
+  mailsSentTo,
+  newEmail,
+  requestReset,
+  signUpAndVerify,
+} from "./auth-api";
+
+const NEW_PASSWORD = "a brand new passphrase";
+// otp_expiry in supabase/config.jsonc is 3600s.
+const PAST_OTP_EXPIRY = 2 * 3600;
 
 const login = (email: string, password: string) => auth("token?grant_type=password", { email, password });
+const verifyReset = (email: string, token: string) => auth("verify", { type: "recovery", email, token });
 
 describe("login", () => {
   it("a verified Account logs in with the correct email and password", async () => {
-    const email = await verifiedAccount("login");
+    const email = await signUpAndVerify("login");
     const res = await login(email, PASSWORD);
     expect(res.status).toBe(200);
     expect((await res.json()).access_token).toBeTruthy();
   });
 
   it("wrong password and unknown email are refused identically", async () => {
-    const email = await verifiedAccount("login");
+    const email = await signUpAndVerify("login");
     const wrongPassword = await login(email, "not the password");
     const unknownEmail = await login(newEmail("nobody"), PASSWORD);
     expect(wrongPassword.status).toBe(400);
-    expect(unknownEmail.status).toBe(wrongPassword.status);
-    expect(await unknownEmail.json()).toEqual(await wrongPassword.json());
+    const body = await wrongPassword.json();
+    expect(body.error_code).toBe("invalid_credentials");
+    expect(unknownEmail.status).toBe(400);
+    expect(await unknownEmail.json()).toEqual(body);
   });
 
-  it("an Account that has not finished verification cannot log in", async () => {
+  it("a sign-up that has not finished verification cannot log in", async () => {
     const email = newEmail("unverified");
     await auth("signup", { email, password: PASSWORD });
     const res = await login(email, PASSWORD);
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect((await res.json()).access_token).toBeUndefined();
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error_code).toBe("email_not_confirmed");
+    expect(body.access_token).toBeUndefined();
   });
 });
 
 describe("password reset", () => {
   it("a valid emailed code lets the Account set a new password; the old one stops working", async () => {
-    const email = await verifiedAccount("reset");
-    expect((await auth("recover", { email })).status).toBe(200);
-    const code = await codeSentTo(email, 1); // message 0 was the sign-up code
+    const email = await signUpAndVerify("reset");
+    const code = await requestReset(email);
 
-    const verified = await auth("verify", { type: "recovery", email, token: code });
+    const verified = await verifyReset(email, code);
     expect(verified.status).toBe(200);
     const { access_token } = await verified.json();
 
-    const changed = await auth("user", { password: "a brand new passphrase" }, access_token, "PUT");
+    const changed = await auth("user", { password: NEW_PASSWORD }, { token: access_token, method: "PUT" });
     expect(changed.status).toBe(200);
 
-    expect((await login(email, "a brand new passphrase")).status).toBe(200);
-    expect((await login(email, PASSWORD)).status).toBeGreaterThanOrEqual(400);
+    expect((await login(email, NEW_PASSWORD)).status).toBe(200);
+    expect((await login(email, PASSWORD)).status).toBe(400);
   });
 
   it("an invalid code is refused and the old password keeps working", async () => {
-    const email = await verifiedAccount("reset");
-    await auth("recover", { email });
-    const code = await codeSentTo(email, 1);
+    const email = await signUpAndVerify("reset");
+    const code = await requestReset(email);
 
-    const bad = await auth("verify", { type: "recovery", email, token: code === "000000" ? "111111" : "000000" });
-    expect(bad.status).toBeGreaterThanOrEqual(400);
-    expect((await bad.json()).access_token).toBeUndefined();
+    const bad = await verifyReset(email, code === "000000" ? "111111" : "000000");
+    expect(bad.status).toBe(403);
+    const body = await bad.json();
+    expect(body.error_code).toBe("otp_expired");
+    expect(body.access_token).toBeUndefined();
 
     expect((await login(email, PASSWORD)).status).toBe(200);
   });
 
-  it("an expired code is refused and the old password keeps working", async () => {
-    const email = await verifiedAccount("reset");
-    await auth("recover", { email });
-    const code = await codeSentTo(email, 1);
+  it("an expired code is refused, a fresh one works, and the old password keeps working meanwhile", async () => {
+    const email = await signUpAndVerify("reset");
+    const stale = await requestReset(email);
+    await ageResetCode(email, PAST_OTP_EXPIRY);
 
-    // Age the code past otp_expiry (3600s) by backdating when it was sent.
-    // Needs a committed write, so it uses its own connection rather than the rollback harness.
-    const pg = (await import("pg")).default;
-    const client = new pg.Client({
-      connectionString: process.env.DB_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
-    });
-    await client.connect();
-    try {
-      await client.query(
-        "update auth.users set recovery_sent_at = now() - interval '2 hours' where email = $1",
-        [email],
-      );
-    } finally {
-      await client.end();
+    const refused = await verifyReset(email, stale);
+    expect(refused.status).toBe(403);
+    expect((await refused.json()).error_code).toBe("otp_expired");
+    expect((await login(email, PASSWORD)).status).toBe(200);
+
+    // Control: a freshly requested code is accepted, so the refusal above was about age.
+    await new Promise((r) => setTimeout(r, 1100)); // auth.email.max_frequency is 1s
+    const fresh = await requestReset(email);
+    expect((await verifyReset(email, fresh)).status).toBe(200);
+  });
+
+  it("the response does not reveal whether an email is registered, and nothing is sent to an unknown one", async () => {
+    const known = await signUpAndVerify("reset");
+    const unverified = newEmail("unverified");
+    await auth("signup", { email: unverified, password: PASSWORD });
+    const unknown = newEmail("nobody");
+
+    const reference = await auth("recover", { email: known });
+    expect(reference.status).toBe(200);
+    const referenceBody = await reference.json();
+
+    for (const email of [unverified, unknown]) {
+      const res = await auth("recover", { email });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(referenceBody);
     }
-
-    const res = await auth("verify", { type: "recovery", email, token: code });
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect((await login(email, PASSWORD)).status).toBe(200);
-  });
-
-  it("the response does not reveal whether an email is registered", async () => {
-    const known = await verifiedAccount("reset");
-    const a = await auth("recover", { email: known });
-    const b = await auth("recover", { email: newEmail("nobody") });
-    expect(b.status).toBe(a.status);
-    expect(await b.json()).toEqual(await a.json());
+    expect(await mailsSentTo(unknown, RESET_SUBJECT)).toBe(0);
   });
 });
