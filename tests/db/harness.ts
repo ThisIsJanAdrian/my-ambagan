@@ -23,6 +23,17 @@ export class Db {
     await this.client.end();
   }
 
+  /** Run a statement as the table owner (bypasses grants and RLS; triggers still fire). */
+  async superuser(text: string, params?: unknown[]) {
+    const sp = `sp_${randomUUID().replace(/-/g, "")}`;
+    await this.client.query(`savepoint ${sp}`);
+    try {
+      return await this.client.query(text, params);
+    } finally {
+      await this.client.query(`rollback to savepoint ${sp}`);
+    }
+  }
+
   /** Create an Account the way Supabase Auth does (row in auth.users). */
   async createAccount(opts: { email?: string; verified?: boolean } = {}): Promise<Account> {
     const id = randomUUID();
