@@ -34,6 +34,11 @@ export class Db {
     }
   }
 
+  /** Run a statement as the table owner and keep its changes for the rest of the test (test setup). */
+  async keep(text: string, params?: unknown[]) {
+    return this.client.query(text, params);
+  }
+
   /** Create an Account the way Supabase Auth does (row in auth.users). */
   async createAccount(opts: { email?: string; verified?: boolean } = {}): Promise<Account> {
     const id = randomUUID();
@@ -100,5 +105,14 @@ export class Account {
   async createRoom(): Promise<string> {
     const { rows } = await this.run("select public.create_room() as room_id");
     return rows[0].room_id;
+  }
+
+  /** Read a Room's Audit log as this Account, newest first. */
+  async auditLog(roomId: string): Promise<{ actor_username: string; event_type: string; created_at: Date }[]> {
+    const { rows } = await this.run(
+      "select actor_username, event_type, created_at from public.room_audit_log($1)",
+      [roomId],
+    );
+    return rows;
   }
 }
