@@ -44,20 +44,7 @@ create table public.rooms (
   constraint room_id_format check (id ~ '^[a-z]{5}(-[a-z]{5}){3}$')
 );
 
--- The Creator is permanent for the Room's life.
-create function public.rooms_creator_permanent() returns trigger
-language plpgsql as $$
-begin
-  if new.creator_id is distinct from old.creator_id then
-    raise exception 'A Room''s Creator is permanent.' using errcode = 'P0001';
-  end if;
-  return new;
-end $$;
-
-create trigger rooms_creator_permanent before update on public.rooms
-  for each row execute function public.rooms_creator_permanent();
-
--- A Member is an Account that has joined a Room. Rejoining restores the same row.
+-- A Member is an Account that has joined a Room.
 create table public.room_members (
   room_id text not null references public.rooms (id) on delete restrict,
   account_id uuid not null references public.accounts (id) on delete restrict,
@@ -88,7 +75,7 @@ create policy room_members_read on public.room_members
 revoke all on public.rooms, public.room_members from anon, authenticated;
 grant select on public.rooms, public.room_members to authenticated;
 
--- Four distinct-by-chance words joined by hyphens; retries until the ID is unused.
+-- Four different random words from the curated list joined by hyphens; retries until the ID is unused.
 create function public.generate_room_id() returns text
 language plpgsql volatile security definer set search_path = '' as $$
 declare
@@ -111,11 +98,22 @@ begin
   if auth.uid() is null then
     raise exception 'You must be signed in.' using errcode = '28000';
   end if;
+  if not public.is_verified() then
+    raise exception 'Verify your email before creating a Room.' using errcode = '42501';
+  end if;
   if not exists (select 1 from public.accounts where id = auth.uid()) then
     raise exception 'Choose a Username before creating a Room.' using errcode = '42501';
   end if;
-  new_id := public.generate_room_id();
-  insert into public.rooms (id, creator_id) values (new_id, auth.uid());
+  loop
+    new_id := public.generate_room_id();
+    begin
+      insert into public.rooms (id, creator_id) values (new_id, auth.uid());
+      exit;
+    exception when unique_violation then
+      -- A concurrent create took this ID between generation and insert; pick again.
+      null;
+    end;
+  end loop;
   insert into public.room_members (room_id, account_id) values (new_id, auth.uid());
   return new_id;
 end $$;

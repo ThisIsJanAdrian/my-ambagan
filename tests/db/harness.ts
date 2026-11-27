@@ -46,6 +46,13 @@ export class Db {
     return new Account(this, id, email);
   }
 
+  /** Create a verified Account that has already chosen its Username. */
+  async createAccountNamed(username: string): Promise<Account> {
+    const account = await this.createAccount();
+    await account.setUsername(username);
+    return account;
+  }
+
   /**
    * Run `fn` as the given authenticated Account (or anonymous when null).
    * Changes persist for the rest of the test unless `fn` throws, in which
