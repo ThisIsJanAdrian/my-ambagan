@@ -55,7 +55,7 @@ export function Members({ roomId, creatorId, me, onBack }: { roomId: string; cre
   return (
     <section>
       <button type="button" onClick={onBack} style={link}>
-        ← Back to Rooms
+        ← Back to Room
       </button>
       <h1>Members</h1>
       <p><code style={{ wordBreak: "break-all" }}>{roomId}</code></p>

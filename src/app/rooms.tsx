@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { AuditLog } from "./audit-log";
-import { Members } from "./members";
+import { Room as RoomScreen } from "./room";
 
 type Room = { id: string; creator_id: string; created_at: string };
 
@@ -17,8 +16,7 @@ export function Rooms({ username }: { username: string }) {
   const [busy, setBusy] = useState(false);
   const [joinId, setJoinId] = useState("");
   const [joined, setJoined] = useState(false);
-  const [auditRoom, setAuditRoom] = useState<string | null>(null);
-  const [membersRoom, setMembersRoom] = useState<Room | null>(null);
+  const [openRoom, setOpenRoom] = useState<Room | null>(null);
 
   const load = useCallback(async () => {
     const [{ data, error }, { data: auth }] = await Promise.all([
@@ -57,17 +55,25 @@ export function Rooms({ username }: { username: string }) {
     await load();
   }
 
-  async function leave(roomId: string) {
-    setBusy(true);
-    setMessage("");
-    const { error } = await supabase.rpc("leave_room", { p_room_id: roomId });
-    setBusy(false);
-    if (error) return setMessage(error.message);
-    await load();
+  if (openRoom) {
+    return (
+      <RoomScreen
+        roomId={openRoom.id}
+        creatorId={openRoom.creator_id}
+        me={me}
+        onBack={() => {
+          setOpenRoom(null);
+          void load();
+        }}
+        onKicked={() => {
+          setOpenRoom(null);
+          setJoined(false);
+          setMessage("You were removed from that Room.");
+          void load();
+        }}
+      />
+    );
   }
-
-  if (membersRoom) return <Members roomId={membersRoom.id} creatorId={membersRoom.creator_id} me={me} onBack={() => setMembersRoom(null)} />;
-  if (auditRoom) return <AuditLog roomId={auditRoom} onBack={() => setAuditRoom(null)} />;
 
   return (
     <main>
@@ -95,17 +101,10 @@ export function Rooms({ username }: { username: string }) {
       <ul style={{ listStyle: "none", padding: 0 }}>
         {rooms?.map((room) => (
           <li key={room.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
-            <code style={{ fontSize: 16, wordBreak: "break-all" }}>{room.id}</code>
-            <button type="button" onClick={() => setMembersRoom(room)} style={{ marginLeft: 8 }}>
-              Members
+            <button type="button" onClick={() => setOpenRoom(room)} style={{ background: "none", border: 0, padding: 0, font: "inherit", textAlign: "left", cursor: "pointer", width: "100%" }}>
+              <code style={{ fontSize: 16, wordBreak: "break-all" }}>{room.id}</code>
+              {room.creator_id === me && <small> · you are the Creator</small>}
             </button>
-            {room.creator_id === me ? (
-              <small> Â· you are the Creator</small>
-            ) : (
-              <button type="button" onClick={() => leave(room.id)} disabled={busy} style={{ marginLeft: 8 }}>
-                Leave
-              </button>
-            )}
           </li>
         ))}
       </ul>

@@ -34,7 +34,7 @@ export function AuditLog({ roomId, onBack }: { roomId: string; onBack: () => voi
   return (
     <section>
       <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#06c", cursor: "pointer", font: "inherit" }}>
-        ← Back to Rooms
+        ← Back to Room
       </button>
       <h1>Audit log</h1>
       <p><code style={{ wordBreak: "break-all" }}>{roomId}</code></p>
