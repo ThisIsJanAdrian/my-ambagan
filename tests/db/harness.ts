@@ -125,10 +125,25 @@ export class Account {
     return this.run("select public.leave_room($1)", [roomId]);
   }
 
+  /** Promote a Member (by Username) to Moderator as this Account. */
+  async promote(roomId: string, username: string) {
+    return this.run("select public.promote_member($1, $2)", [roomId, username]);
+  }
+
+  /** Demote this Account from Moderator to regular Member. */
+  async demoteSelf(roomId: string) {
+    return this.run("select public.demote_self($1)", [roomId]);
+  }
+
+  /** Kick a Member (by Username) out of a Room as this Account. */
+  async kick(roomId: string, username: string) {
+    return this.run("select public.kick_member($1, $2)", [roomId, username]);
+  }
+
   /** Read a Room's Audit log as this Account, newest first. */
-  async auditLog(roomId: string): Promise<{ actor_username: string; event_type: string; created_at: Date }[]> {
+  async auditLog(roomId: string): Promise<{ actor_username: string; event_type: string; target_username: string | null; created_at: Date }[]> {
     const { rows } = await this.run(
-      "select actor_username, event_type, created_at from public.room_audit_log($1)",
+      "select actor_username, event_type, target_username, created_at from public.room_audit_log($1)",
       [roomId],
     );
     return rows;
