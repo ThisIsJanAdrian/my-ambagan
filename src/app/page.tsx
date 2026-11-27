@@ -26,8 +26,14 @@ export default function Home() {
   const [username, setUsername] = useState("");
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
+  const [codeAccepted, setCodeAccepted] = useState(false);
 
   function go(next: Step) {
+    if (codeAccepted) {
+      // Abandoning a half-finished reset: drop the session its code created.
+      void supabase.auth.signOut();
+      setCodeAccepted(false);
+    }
     setMessage("");
     setNotice("");
     setPassword("");
@@ -75,13 +81,15 @@ export default function Home() {
       setStep("reset-code");
       setNotice(`If ${email} is registered, we emailed it a 6-digit code.`);
     } else if (step === "reset-code") {
-      const { error: codeError } = await supabase.auth.verifyOtp({ email, token: code, type: "recovery" });
-      if (codeError) return setMessage("That code is wrong or has expired. Your old password still works.");
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) {
-        await supabase.auth.signOut();
-        return setMessage(error.message);
+      // A code can only be used once, so after it is accepted keep that session and let the
+      // user retry the password (e.g. "must differ from your old one") without re-entering it.
+      if (!codeAccepted) {
+        const { error: codeError } = await supabase.auth.verifyOtp({ email, token: code, type: "recovery" });
+        if (codeError) return setMessage("That code is wrong or has expired. Your old password still works.");
+        setCodeAccepted(true);
       }
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) return setMessage(error.message);
       const { data } = await supabase.auth.getUser();
       if (data.user) await enter(data.user.id);
     }
@@ -125,7 +133,11 @@ export default function Home() {
       )}
       {step === "reset-code" && (
         <>
-          <input style={field} inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} required />
+          {codeAccepted ? (
+            <p>Code accepted. Choose your new password.</p>
+          ) : (
+            <input style={field} inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} required />
+          )}
           {passwordField("New password")}
         </>
       )}
