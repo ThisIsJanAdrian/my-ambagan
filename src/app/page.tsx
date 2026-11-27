@@ -110,6 +110,13 @@ export default function Home() {
     <input style={field} type="password" placeholder={placeholder} minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
   );
 
+  const emailField = (
+    <input style={field} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+  );
+  const passwordField = (placeholder: string) => (
+    <input style={field} type="password" placeholder={placeholder} minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
+  );
+
   return (
     <form onSubmit={submit}>
       <h1>MyAmbagan</h1>
