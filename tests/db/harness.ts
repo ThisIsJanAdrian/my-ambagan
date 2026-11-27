@@ -107,6 +107,24 @@ export class Account {
     return rows[0].room_id;
   }
 
+  /** Call join_room as this Account; returns the outcome and message without throwing on refusals. */
+  async tryJoin(roomId: string): Promise<{ outcome: string; message: string }> {
+    const { rows } = await this.run("select outcome, message from public.join_room($1)", [roomId]);
+    return rows[0];
+  }
+
+  /** Join a Room as this Account; throws the refusal message if the join is refused. */
+  async joinRoom(roomId: string): Promise<string> {
+    const { outcome, message } = await this.tryJoin(roomId);
+    if (!["joined", "rejoined", "already_member"].includes(outcome)) throw new Error(message);
+    return outcome;
+  }
+
+  /** Leave a Room as this Account. */
+  async leaveRoom(roomId: string) {
+    return this.run("select public.leave_room($1)", [roomId]);
+  }
+
   /** Read a Room's Audit log as this Account, newest first. */
   async auditLog(roomId: string): Promise<{ actor_username: string; event_type: string; created_at: Date }[]> {
     const { rows } = await this.run(
